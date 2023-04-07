@@ -1,4 +1,4 @@
-package ocsp;
+package ca;
 
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -16,28 +16,33 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.Serializable;
 import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.*;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Base64;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Date;
 
-public class CertificateAuthority {
+public class CertificateAuthority implements Serializable {
     private KeyPair keyPair;
-    private X500Name issuer;
+    private final X500Name issuer;
     private BigInteger serialNumber;
 
-    public CertificateAuthority() throws NoSuchAlgorithmException, NoSuchProviderException {
+    public CertificateAuthority(String caName) throws NoSuchAlgorithmException, NoSuchProviderException {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048, new SecureRandom());
+        String caNameToX500 = "CN=" + caName;
         this.keyPair = keyPairGenerator.generateKeyPair();
-        this.issuer = new X500Name("CN=CA");
+        this.issuer = new X500Name("CN="+caName);
         this.serialNumber = BigInteger.ONE;
     }
 
-    public X509Certificate issueCertificate(PublicKey publicKey, Date startDate, Date endDate) throws OperatorCreationException, CertificateException, CertIOException {
-        X500Name subject = new X500Name("CN=Client");
+    public X509Certificate issueCertificate(PublicKey publicKey, Date startDate, Date endDate, String clientName) throws OperatorCreationException, CertificateException, CertIOException {
+        X500Name subject = new X500Name("CN=" + clientName);
         X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(issuer, serialNumber, startDate, endDate, subject, publicKey);
 
         // Add extensions
@@ -63,16 +68,23 @@ public class CertificateAuthority {
         outputStream.close();
     }
 
+    public void loadPrivateKey(PrivateKey privateKey) {
+        this.keyPair = new KeyPair(getPublicKey(), privateKey);
+    }
+
+
     public PublicKey getPublicKey() {
         return keyPair.getPublic();
     }
-    public PrivateKey getPrivateKey(){
+
+    public PrivateKey getPrivateKey() {
         return keyPair.getPrivate();
     }
 
+
     public X509Certificate createSelfSignedCertificate(Date startDate, Date endDate) throws OperatorCreationException, CertificateException, CertIOException {
-        X500Name subject = new X500Name("CN=CA");
-        X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(subject, serialNumber, startDate, endDate, subject, keyPair.getPublic());
+        //X500Name subject = new X500Name("CN=ca");
+        X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(issuer, serialNumber, startDate, endDate, issuer, keyPair.getPublic());
 
         // Add extensions
         certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign));
@@ -89,4 +101,7 @@ public class CertificateAuthority {
         return certificate;
     }
 
+    public X500Name getIssuer() {
+        return issuer;
+    }
 }
