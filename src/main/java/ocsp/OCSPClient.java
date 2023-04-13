@@ -117,12 +117,14 @@ public class OCSPClient {
 //                TBSRequest tbsRequest = new TBSRequest(requestorName, certSequence, extensions);
 //                // Создать объект OCSPRequest
 //                OCSPRequest request = new OCSPRequest(tbsRequest, null); // подпись может быть null
-//
-//                byte[] ocspRequest = request.getEncoded(); // получить запрос в виде байтового потока
-//                oos.writeInt(ocspRequest.length); // отправить длину байтового потока
-//                oos.write(ocspRequest); // отправить байтовый поток
-//                oos.flush(); // очистить поток
-//
+                FileInputStream fis = new FileInputStream(new File(certificatesPath + "clientЭтотклиентCert.crt"));
+                CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                X509Certificate userCertificate = (X509Certificate) cf.generateCertificate(fis);
+                byte[] ocspRequest = makeOcspRequest(userCertificate).getEncoded(); // получить запрос в виде байтового потока
+                oos.writeInt(ocspRequest.length); // отправить длину байтового потока
+                oos.write(ocspRequest); // отправить байтовый поток
+                oos.flush(); // очистить поток
+
 
 //                System.out.println("Сертификаты были отправлены.");
                 //System.out.println("Clien sent message " + clientCommand + " to server.");
@@ -180,6 +182,14 @@ public class OCSPClient {
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
+        } catch (OCSPException e) {
+            throw new RuntimeException(e);
+        } catch (CertificateEncodingException e) {
+            throw new RuntimeException(e);
+        } catch (CertificateException e) {
+            throw new RuntimeException(e);
+        } catch (OperatorCreationException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -197,16 +207,17 @@ public class OCSPClient {
         }
     }
 
-    public static OCSPReq makeOcspRequest(X509Certificate caCert, X509Certificate certToCheck) throws OperatorCreationException, OCSPException, CertificateEncodingException {
+    public static OCSPReq makeOcspRequest(X509Certificate certToCheck) throws OperatorCreationException, OCSPException, CertificateEncodingException {
         DigestCalculatorProvider digCalcProv = new JcaDigestCalculatorProviderBuilder()
                 .setProvider("BCFIPS").build();
         // general id value for our test issuer cert and a serial number.
         CertificateID certId = new JcaCertificateID(
-                digCalcProv.get(CertificateID.HASH_SHA1), caCert, certToCheck.getSerialNumber());
+                digCalcProv.get(CertificateID.HASH_SHA1), certToCheck, certToCheck.getSerialNumber());
         // basic request generation
         OCSPReqBuilder gen = new OCSPReqBuilder();
         gen.addRequest(certId);
         return gen.build();
     }
+
 }
 

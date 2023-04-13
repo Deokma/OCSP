@@ -52,10 +52,15 @@ public class OCSPServer {
     static String ocspName;
     static String serverHostName = "localhost";
 
-    public static void main(String[] args) throws IOException, ClassNotFoundException, NoSuchAlgorithmException, NoSuchProviderException {
+    public static void main(String[] args) throws IOException, ClassNotFoundException, NoSuchAlgorithmException, NoSuchProviderException, CertificateException {
 
         checkOCSPNameFile();
         X500Name ocspSubject = new X500Name("CN=" + ocspName);
+        FileInputStream fis = new FileInputStream("src/main/resources/ocsp/server/clientЭтот OCSPCert.crt");
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        X509Certificate ocspCertificate = (X509Certificate) cf.generateCertificate(fis);
+
+        fis = new FileInputStream("src/main/resources/ocsp/server/privateKey.key");
 
         CertificateAuthority ocspObj = new CertificateAuthority(ocspName);
         PrivateKey ocspKey = ocspObj.getPrivateKey();
@@ -86,8 +91,9 @@ public class OCSPServer {
                     ois.readFully(ocspRequest);
 
                     // создать объект OCSPRequest из буфера с запросом
-                    OCSPRequest request = OCSPRequest.getInstance(ocspRequest);
 
+                    OCSPReq request = new OCSPReq(ocspRequest);
+                    OCSPResp resp = makeOcspResponse(ocspCertificate,,request);
                     // обработать запрос и получить ответ
                     byte[] ocspResponse = handleOcspRequest(request);
                     if (ocspResponse == null) {
@@ -200,10 +206,10 @@ public class OCSPServer {
 
 
     }
+
     public static OCSPResp makeOcspResponse(
             X509Certificate caCert, PrivateKey caPrivateKey, OCSPReq ocspReq)
-            throws OCSPException, OperatorCreationException, CertificateEncodingException
-    {
+            throws OCSPException, OperatorCreationException, CertificateEncodingException {
         DigestCalculatorProvider digCalcProv = new JcaDigestCalculatorProviderBuilder()
                 .setProvider("BCFIPS").build();
         BasicOCSPRespBuilder respGen = new JcaBasicOCSPRespBuilder(
@@ -218,20 +224,18 @@ public class OCSPServer {
         OCSPRespBuilder rGen = new OCSPRespBuilder();
         return rGen.build(OCSPRespBuilder.SUCCESSFUL, resp);
     }
+
     public static boolean isGoodCertificate(
             OCSPResp ocspResp, X509Certificate caCert, X509Certificate eeCert)
-            throws OperatorCreationException, OCSPException, CertificateEncodingException
-    {
+            throws OperatorCreationException, OCSPException, CertificateEncodingException {
         DigestCalculatorProvider digCalcProv = new JcaDigestCalculatorProviderBuilder()
                 .setProvider("BCFIPS").build();
         // SUCCESSFUL here means the OCSP request worked, it doesn't mean the certificate is valid.
-        if (ocspResp.getStatus() == OCSPRespBuilder.SUCCESSFUL)
-        {
-            BasicOCSPResp resp = (BasicOCSPResp)ocspResp.getResponseObject();
+        if (ocspResp.getStatus() == OCSPRespBuilder.SUCCESSFUL) {
+            BasicOCSPResp resp = (BasicOCSPResp) ocspResp.getResponseObject();
             // make sure response is signed by the appropriate CA
             if (resp.isSignatureValid(new JcaContentVerifierProviderBuilder()
-                    .setProvider("BCFIPS").build(caCert.getPublicKey())))
-            {
+                    .setProvider("BCFIPS").build(caCert.getPublicKey()))) {
                 // return the actual status of the certificate – null means valid.
                 return resp.getResponses()[0].getCertID().matchesIssuer(
                         new JcaX509CertificateHolder(caCert), digCalcProv)
@@ -242,6 +246,7 @@ public class OCSPServer {
         }
         throw new IllegalStateException("OCSP Request Failed");
     }
+
     // Метод для обработки OCSP запросов
     private static byte[] handleOcspRequest(OCSPRequest request) throws IOException, CertificateException, OperatorCreationException, OCSPException, NoSuchAlgorithmException, InvalidKeySpecException {
         // TODO: Здесь нужно добавить код для обработки OCSP запросов
