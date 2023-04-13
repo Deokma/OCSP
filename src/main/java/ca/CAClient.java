@@ -8,12 +8,15 @@ import org.bouncycastle.asn1.pkcs.CertificationRequestInfo;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
+import org.bouncycastle.asn1.x509.TBSCertificate;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
 import java.io.*;
 import java.net.ConnectException;
 import java.net.Socket;
 import java.security.*;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Scanner;
 
 /**
@@ -21,25 +24,19 @@ import java.util.Scanner;
  */
 
 public class CAClient {
+    static String serverHostname = "localhost"; // Имя сервера, к которому подключаемся
+    static int port = 9999; // Порт сервера
     static String subjectName;
     static String subjectNamePath = "src/main/resources/client/ca/subjectName.dat";
+    static String subjectPath = "src/main/resources/client/ca/";
 
     public static void main(String[] args) throws IOException, ClassNotFoundException {
-        String serverHostname = "localhost"; // Имя сервера, к которому подключаемся
-        int port = 9999; // Порт сервера
 
-        if (!new File(subjectNamePath).exists()) {
-            Scanner scanner = new Scanner(System.in);
-            System.out.print("Пожалуйства введите имя пользователя: ");
-            subjectName = scanner.nextLine();
-            ObjectOutputStream subjectNameOut = new ObjectOutputStream(new FileOutputStream(subjectNamePath));
-            subjectNameOut.writeObject(subjectName);
-            subjectNameOut.close();
-        } else {
-            ObjectInputStream subjectNameIn = new ObjectInputStream(new FileInputStream(subjectNamePath));
-            subjectName = (String) subjectNameIn.readObject();
-        }
+
+        checkSubjNameFile();
+
         X500Name subject = new X500Name("CN=" + subjectName);
+
         try {
             // Создаем сокет и подключаемся к серверу
             Socket socket = new Socket(serverHostname, port);
@@ -52,6 +49,25 @@ public class CAClient {
             KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
             keyGen.initialize(2048);
             KeyPair keyPair = keyGen.generateKeyPair();
+
+            if (!new File(subjectPath + "privateKey.key").exists()) {
+                // Сохраняем приватный ключ в файл
+                PrivateKey privateKey = keyPair.getPrivate();
+                byte[] privateKeyEncoded = privateKey.getEncoded();
+                PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privateKeyEncoded);
+                FileOutputStream privateKeyStream = new FileOutputStream(subjectPath + "privateKey.key");
+                privateKeyStream.write(privateKeySpec.getEncoded());
+                privateKeyStream.close();
+            }
+            if (!new File(subjectPath + "publicKey.key").exists()) {
+                // Сохраняем публичный ключ в файл
+                PublicKey publicKey = keyPair.getPublic();
+                byte[] publicKeyEncoded = publicKey.getEncoded();
+                X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(publicKeyEncoded);
+                FileOutputStream publicKeyStream = new FileOutputStream(subjectPath + "publicKey.key");
+                publicKeyStream.write(publicKeySpec.getEncoded());
+                publicKeyStream.close();
+            }
 
             java.security.interfaces.RSAPublicKey rsaPublicKey = (java.security.interfaces.RSAPublicKey) keyPair.getPublic();
             java.security.interfaces.RSAPrivateKey rsaPrivateKey = (java.security.interfaces.RSAPrivateKey) keyPair.getPrivate();
@@ -103,17 +119,30 @@ public class CAClient {
             // Закрываем соединение
             socket.close();
             System.out.println("Соединение с сервером закрыто");
-        } catch (ConnectException e) {
+        } catch (
+                ConnectException e) {
             System.out.println("Извините, неполадки с соединением. " +
                     "Возможно сервер сейчас не доступен.");
-        } catch (IOException e) {
+        } catch (
+                IOException e) {
             e.printStackTrace();
-        } catch (NoSuchAlgorithmException e) {
+        } catch (
+                NoSuchAlgorithmException | SignatureException | InvalidKeyException e) {
             throw new RuntimeException(e);
-        } catch (SignatureException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidKeyException e) {
-            throw new RuntimeException(e);
+        }
+    }
+
+    public static void checkSubjNameFile() throws IOException, ClassNotFoundException {
+        if (!new File(subjectNamePath).exists()) {
+            Scanner scanner = new Scanner(System.in);
+            System.out.print("Пожалуйства введите имя пользователя: ");
+            subjectName = scanner.nextLine();
+            ObjectOutputStream subjectNameOut = new ObjectOutputStream(new FileOutputStream(subjectNamePath));
+            subjectNameOut.writeObject(subjectName);
+            subjectNameOut.close();
+        } else {
+            ObjectInputStream subjectNameIn = new ObjectInputStream(new FileInputStream(subjectNamePath));
+            subjectName = (String) subjectNameIn.readObject();
         }
     }
 }

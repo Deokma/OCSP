@@ -25,8 +25,8 @@ import java.util.Scanner;
 public class CAServer {
     static int port = 9999;
     static String caName;
-    static String serverPath = "src/main/resources/ca/server/";
-    static String clientPath = "src/main/resources/ca/client/";
+    static String caServerPath = "src/main/resources/ca/server/";
+    static String caClientPath = "src/main/resources/ca/client/";
 
     public static void main(String[] args) throws IOException, NoSuchAlgorithmException, NoSuchProviderException, CertificateException, OperatorCreationException, InvalidKeySpecException, ClassNotFoundException {
 
@@ -51,7 +51,6 @@ public class CAServer {
 
             // канал чтения из сокета
             DataInputStream in = new DataInputStream(clientSocket.getInputStream());
-            System.out.println("DataInputStream created");
 
             new Thread(() -> {
                 String response;
@@ -72,15 +71,8 @@ public class CAServer {
                     // Обработка запроса и получение ответа
                     PKCS10CertificationRequest request = new PKCS10CertificationRequest(fileBytes);
                     response = handleRequest(caObj, request);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                } catch (CertificateException e) {
-                    throw new RuntimeException(e);
-                } catch (NoSuchAlgorithmException e) {
-                    throw new RuntimeException(e);
-                } catch (NoSuchProviderException e) {
-                    throw new RuntimeException(e);
-                } catch (OperatorCreationException e) {
+                } catch (IOException | CertificateException | NoSuchAlgorithmException | NoSuchProviderException |
+                         OperatorCreationException e) {
                     throw new RuntimeException(e);
                 }
                 try {
@@ -119,7 +111,7 @@ public class CAServer {
         JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider(new BouncyCastleProvider());
         PublicKey publicKey = converter.getPublicKey(publicKeyInfo);
         String cert = createCertificate(ca, csr.getSubject().toString(), publicKey);
-        System.out.println(cert.toString());
+        System.out.println("Создан сертификат: " + cert.toString());
 //        if (cert == request) {
         return cert;
 //        } else {
@@ -131,30 +123,30 @@ public class CAServer {
         String subjName = certificateName;
         subjName = certificateName.substring(3);
         // Выдача сертификата клиенту
-        ca.savePrivateKey(clientPath + "client" + subjName + "PrivateKey.pem");
+        ca.savePrivateKey(caClientPath + "client" + subjName + "PrivateKey.pem");
 
         X509Certificate clientCert = ca.issueCertificate(publicKey, new Date(), new Date(System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000L), subjName);
         String certFileName = "client" + subjName + "Cert.crt";
-        FileOutputStream fos = new FileOutputStream(clientPath + certFileName);
+        FileOutputStream fos = new FileOutputStream(caClientPath + certFileName);
         fos.write(clientCert.getEncoded());
         fos.close();
         return certFileName;
     }
 
     public static void checkCANameFile() throws IOException, ClassNotFoundException {
-        if (!new File(serverPath + "caName.dat").exists()) {
-            System.out.println("Задайте название вашего УЦ: ");
+        if (!new File(caServerPath + "caName.dat").exists()) {
+            System.out.print("Задайте название вашего УЦ: ");
             Scanner in = new Scanner(System.in);
             String caNameInput = in.nextLine();
-            ObjectOutputStream caNameFileOutput = new ObjectOutputStream(new FileOutputStream(serverPath + "caName.dat"));
+            ObjectOutputStream caNameFileOutput = new ObjectOutputStream(new FileOutputStream(caServerPath + "caName.dat"));
             caNameFileOutput.writeObject(caNameInput);
             caNameFileOutput.close();
 
-            ObjectInputStream caNameFileInput = new ObjectInputStream(new FileInputStream(serverPath + "caName.dat"));
+            ObjectInputStream caNameFileInput = new ObjectInputStream(new FileInputStream(caServerPath + "caName.dat"));
             caName = (String) caNameFileInput.readObject();
         } else {
             try {
-                ObjectInputStream caNameFileInput = new ObjectInputStream(new FileInputStream(serverPath + "caName.dat"));
+                ObjectInputStream caNameFileInput = new ObjectInputStream(new FileInputStream(caServerPath + "caName.dat"));
                 caName = (String) caNameFileInput.readObject();
             } catch (Exception e) {
                 System.out.println("При получении имени УЦ произошла ошибка");
@@ -163,24 +155,24 @@ public class CAServer {
     }
 
     public static void checkStartConfigure(CertificateAuthority ca, PrivateKey caKey) {
-        if (!new File(serverPath + "caCert.crt").exists()) {
+        if (!new File(caServerPath + "caCert.crt").exists()) {
             System.out.println("Создаём caCert.crt.");
             try {
                 // Создание самоподписанного сертификата
                 X509Certificate selfSignedCert = ca.createSelfSignedCertificate(new Date(), new Date(System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000L));
-                FileOutputStream caCertFile = new FileOutputStream(serverPath + "caCert.crt");
+                FileOutputStream caCertFile = new FileOutputStream(caServerPath + "caCert.crt");
                 caCertFile.write(selfSignedCert.getEncoded());
                 caCertFile.close();
-                FileOutputStream caPublicKeyFile = new FileOutputStream(serverPath + "caPublicKey.key");
+                FileOutputStream caPublicKeyFile = new FileOutputStream(caServerPath + "caPublicKey.key");
                 caPublicKeyFile.write(selfSignedCert.getPublicKey().getEncoded());
                 caPublicKeyFile.close();
-                FileOutputStream caPrivateKeyFile = new FileOutputStream(serverPath + "caPrivateKey.key");
+                FileOutputStream caPrivateKeyFile = new FileOutputStream(caServerPath + "caPrivateKey.key");
                 caPrivateKeyFile.write(ca.getPrivateKey().getEncoded());
                 caPrivateKeyFile.close();
-                ObjectOutputStream privateKeyToFile = new ObjectOutputStream(new FileOutputStream(serverPath + "privateKeyObj.dat"));
+                ObjectOutputStream privateKeyToFile = new ObjectOutputStream(new FileOutputStream(caServerPath + "privateKeyObj.dat"));
                 privateKeyToFile.writeObject(ca.getPrivateKey());
                 privateKeyToFile.close();
-                try (ObjectInputStream keyCheck = new ObjectInputStream(new FileInputStream(serverPath + "privateKeyObj.dat"))) {
+                try (ObjectInputStream keyCheck = new ObjectInputStream(new FileInputStream(caServerPath + "privateKeyObj.dat"))) {
                     caKey = (PrivateKey) keyCheck.readObject();
                 } catch (IOException | ClassNotFoundException e) {
                     System.out.println("Error loading private key: " + e.getMessage());
@@ -191,7 +183,7 @@ public class CAServer {
                 System.exit(1);
             }
         } else {
-            try (ObjectInputStream keyCheck = new ObjectInputStream(new FileInputStream(serverPath + "privateKeyObj.dat"))) {
+            try (ObjectInputStream keyCheck = new ObjectInputStream(new FileInputStream(caServerPath + "privateKeyObj.dat"))) {
                 caKey = (PrivateKey) keyCheck.readObject();
                 ca.loadPrivateKey(caKey);
             } catch (IOException | ClassNotFoundException e) {
