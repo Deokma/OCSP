@@ -6,26 +6,24 @@ import org.bouncycastle.asn1.ocsp.*;
 import org.bouncycastle.asn1.pkcs.CertificationRequest;
 import org.bouncycastle.asn1.pkcs.CertificationRequestInfo;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
-import org.bouncycastle.asn1.x509.CRLReason;
-import org.bouncycastle.asn1.x509.GeneralName;
-import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
+import org.bouncycastle.asn1.x509.*;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
+import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.ocsp.*;
 import org.bouncycastle.cert.ocsp.jcajce.JcaBasicOCSPRespBuilder;
 import org.bouncycastle.cert.ocsp.jcajce.JcaCertificateID;
-import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.DigestCalculator;
-import org.bouncycastle.operator.DigestCalculatorProvider;
-import org.bouncycastle.operator.OperatorCreationException;
+import org.bouncycastle.operator.*;
+import org.bouncycastle.operator.bc.BcDefaultDigestProvider;
+import org.bouncycastle.operator.bc.BcDigestCalculatorProvider;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
 import java.io.*;
+import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -49,6 +47,8 @@ public class OCSPServer {
     static int port = 8888;
     static int caPort = 9999;
     static String ocspServerPath = "src/main/resources/ocsp/server/";
+    static String caCertPath = "src/main/resources/ca/server/caCert.crt";
+    ;
     static String ocspName;
     static String serverHostName = "localhost";
 
@@ -60,7 +60,10 @@ public class OCSPServer {
         CertificateFactory cf = CertificateFactory.getInstance("X.509");
         X509Certificate ocspCertificate = (X509Certificate) cf.generateCertificate(fis);
 
-        fis = new FileInputStream("src/main/resources/ocsp/server/privateKey.key");
+        fis = new FileInputStream(caCertPath);
+
+        X509Certificate caCert = (X509Certificate) cf.generateCertificate(fis);
+
 
         CertificateAuthority ocspObj = new CertificateAuthority(ocspName);
         PrivateKey ocspKey = ocspObj.getPrivateKey();
@@ -91,18 +94,60 @@ public class OCSPServer {
                     ois.readFully(ocspRequest);
 
                     // создать объект OCSPRequest из буфера с запросом
+                    OCSPReq ocspReq = new OCSPReq(ocspRequest);
+                    // TODO проверка на содержание
+                    System.out.println(ocspReq.getCerts().length);
+                    System.out.println(ocspReq.getRequestorName());
 
-                    OCSPReq request = new OCSPReq(ocspRequest);
-                    OCSPResp resp = makeOcspResponse(ocspCertificate,,request);
-                    // обработать запрос и получить ответ
-                    byte[] ocspResponse = handleOcspRequest(request);
-                    if (ocspResponse == null) {
-                        throw new RuntimeException("OCSP Response is null");
+                    CertificateID certID = ocspReq.getRequestList()[0].getCertID();
+                    byte[] hash = certID.getIssuerNameHash();
+                    byte[] key = certID.getIssuerKeyHash();
+                    BigInteger serialNumber = certID.getSerialNumber();
+                    PublicKey publicKey = caCert.getPublicKey();
+                    SubjectPublicKeyInfo pubKeyInfo = SubjectPublicKeyInfo.getInstance(publicKey.getEncoded());
+                    JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
+                    ResponderID responderID = new ResponderID(ASN1OctetString.getInstance(extUtils.createSubjectKeyIdentifier(publicKey)));
+
+                    RespID respID = new RespID(ResponderID.getInstance(responderID.toASN1Primitive()));
+                    BasicOCSPRespBuilder builder = new BasicOCSPRespBuilder(respID);
+
+                    //BasicOCSPRespBuilder builder = new BasicOCSPRespBuilder((RespID) ocspCertificate.getPublicKey());
+
+
+                    // Check if the request is for this certificate
+                    if (caCert.getSerialNumber().equals(serialNumber)
+                            && caCert.getIssuerX500Principal().getName().hashCode() == hash.hashCode()
+                            && caCert.getPublicKey().getEncoded().hashCode() == key.hashCode()) {
+                        CertificateStatus certStatus = getCertificateStatus();
+                        builder.addResponse(certID, certStatus);
                     }
-                    // отправить ответ клиенту
-                    oos.writeInt(ocspResponse.length);
-                    oos.write(ocspResponse);
+                    // PrivateKey privateKey = ... // Здесь нужно загрузить приватный ключ для подписи
+                    AlgorithmIdentifier signatureAlgorithm = new DefaultSignatureAlgorithmIdentifierFinder().find("SHA256withRSA");
+
+// Create the digest calculator provider
+                   // BcDigestCalculatorProvider digestProvider = new BcDigestCalculatorProvider();
+
+// Get the digest calculator for the algorithm
+                  //  DigestCalculator digestCalculator = digestProvider.get(signatureAlgorithm);
+                    ContentSigner contentSigner = new JcaContentSignerBuilder("SHA256WithRSA").build(ocspKey);
+
+                    BasicOCSPResp basicOCSPResp = builder.build(contentSigner, null, new Date());
+
+                   // OCSPResp ocspResp = new OCSPResp(OCSPResponse.getInstance(builder.build(contentSigner, null, new Date())));
+                    // send the OCSP response
+
+
+                    // отправка ответа клиенту
+                    byte[] ocspResponseBytes = basicOCSPResp.getEncoded();
+                    oos.writeInt(ocspResponseBytes.length);
+                    oos.write(ocspResponseBytes);
                     oos.flush();
+                    while (!clientSocket.isOutputShutdown() && oos.size() > 0) {
+                        clientSocket.getOutputStream().flush();
+                        Thread.sleep(500);
+                    }
+                    clientSocket.setSoTimeout(10000);
+
                 } catch (IOException e) {
                     e.printStackTrace();
                 } catch (Exception e) {
@@ -117,6 +162,7 @@ public class OCSPServer {
                     }
                 }
             }).start();
+
 
             // получить длину байтового потока с запросом
             //int ocspRequestLength = ois.readInt();
@@ -205,6 +251,13 @@ public class OCSPServer {
 //            }).start();
 
 
+    }
+
+    private static CertificateStatus getCertificateStatus() throws CertificateEncodingException {
+        // Check the certificate status
+        return new RevokedStatus(new Date(), 0);
+        //return CertificateStatus.GOOD;
+        //return new UnknownStatus();
     }
 
     public static OCSPResp makeOcspResponse(
