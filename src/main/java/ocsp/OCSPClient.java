@@ -1,5 +1,6 @@
 package ocsp;
 
+import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.ocsp.BasicOCSPResponse;
@@ -55,7 +56,7 @@ public class OCSPClient {
 //            fis.close();
 //
 //            // Чтение клиентского сертификата из файла
-//            fis = new FileInputStream("../clientDenisCert.crt");
+//            fis = new FileInputStream("src/main/resources/client/ocsp/certificates/clientЭтотклиентCert.crt");
 //            X509Certificate clientCert = (X509Certificate) cf.generateCertificate(fis);
 //            fis.close();
 //            // Проверка цепочки сертификатов
@@ -71,28 +72,25 @@ public class OCSPClient {
              DataOutputStream oos = new DataOutputStream(socket.getOutputStream());
              DataInputStream ois = new DataInputStream(socket.getInputStream());) {
 
-            System.out.println("Client connected to socket.");
-            System.out.println();
-            System.out.println("Client writing channel = oos & reading channel = ois initialized.");
+            System.out.println("Client connected to socket.\n");
 
             // проверяем живой ли канал и работаем если живой
             while (true) {
 
-                System.out.println("Client start writing in channel...");
                 Thread.sleep(1000);
 
                 FileInputStream fis = new FileInputStream(certificatesPath + "clientЭтотклиентCert.crt");
                 CertificateFactory cf = CertificateFactory.getInstance("X.509");
                 X509Certificate userCertificate = (X509Certificate) cf.generateCertificate(fis);
+                fis = new FileInputStream(certificatesPath + "clientЭтотOCSPCert.crt");
+                X509Certificate userCertificate1 = (X509Certificate) cf.generateCertificate(fis);
                 List<X509Certificate> certsToCheck = new ArrayList<>();
                 certsToCheck.add(userCertificate);
+                certsToCheck.add(userCertificate1);
 // добавить сертификаты в список certsToCheck
                 // OCSPReq ocspRequest = makeOcspRequest(certsToCheck, "My OCSP Client");
 
                 OCSPReq ocspRequest = makeOcspRequest(certsToCheck, subjectName); // получить запрос в виде байтового потока
-
-                System.out.println(ocspRequest.getRequestorName());
-                System.out.println(ocspRequest.getCerts().length);
                 byte[] ocspRequestByte = ocspRequest.getEncoded();
                 oos.writeInt(ocspRequestByte.length); // отправить длину байтового потока
                 oos.write(ocspRequestByte); // отправить байтовый поток
@@ -133,16 +131,26 @@ public class OCSPClient {
 
 
                     ResponseData responseData = ResponseData.getInstance(basicResp.getTBSResponseData());
-                    System.out.println("BasicOCSPResp: " + basicResp.toString());
-                    System.out.println("ResponseData: " + responseData.getResponses().toString());
+
+                    System.out.println("Response Version: " + basicResp.getVersion());
+                    System.out.println("OCSPName: " + ois.readUTF());
+                    //System.out.println("ResponseData: " + responseData.getResponses().toString());
                     System.out.println("  producedAt: " + basicResp.getProducedAt());
-                    System.out.println("  responderId: " + responseData.getResponderID().toString());
-                    System.out.println("  responses:");
-                    for (Object responsee : responseData.getResponses()) {
-                        System.out.println("    certId: " + ((SingleResponse) responsee).getCertID());
-                        System.out.println("    certStatus: " + ((SingleResponse) responsee).getCertStatus());
-                        System.out.println("    thisUpdate: " + ((SingleResponse) responsee).getThisUpdate());
-                        System.out.println("    nextUpdate: " + ((SingleResponse) responsee).getNextUpdate());
+                    //System.out.println("  responderId: " + responseData.getResponderID().toString());
+                    //System.out.println("  responses:" + responseData.getResponses());
+                    for (ASN1Encodable responses : responseData.getResponses()) {
+                        SingleResponse singleResponse = SingleResponse.getInstance(responses.toASN1Primitive());
+
+                        System.out.println(singleResponse.getCertID());
+                        System.out.println(singleResponse.getCertStatus().getStatus().toString());
+                        System.out.println(singleResponse.getThisUpdate().getDate());
+                        System.out.println(singleResponse.getNextUpdate());
+                        //System.out.println(singleResponse.getNextUpdate().toString());
+                        //System.out.println("    certId: " + ( responses).toString());
+                        System.out.println();
+//                        System.out.println("    certStatus: " + ((SingleResponse) responses).getCertStatus());
+//                        System.out.println("    thisUpdate: " + ((SingleResponse) responses).getThisUpdate());
+//                        System.out.println("    nextUpdate: " + ((SingleResponse) responses).getNextUpdate());
                     }
 
 //                    // обработать ответ

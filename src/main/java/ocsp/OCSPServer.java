@@ -38,17 +38,13 @@ import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 
 public class OCSPServer {
     static int port = 8888;
     static int caPort = 9999;
     static String ocspServerPath = "src/main/resources/ocsp/server/";
     static String caCertPath = "src/main/resources/ca/server/caCert.crt";
-    ;
     static String ocspName;
     static String serverHostName = "localhost";
 
@@ -96,15 +92,23 @@ public class OCSPServer {
                     // создать объект OCSPRequest из буфера с запросом
                     OCSPReq ocspReq = new OCSPReq(ocspRequest);
                     // TODO проверка на содержание
-                    System.out.println(ocspReq.getCerts().length);
+                    System.out.println(ocspReq.getRequestList().length);
+
                     System.out.println(ocspReq.getRequestorName());
 
                     CertificateID certID = ocspReq.getRequestList()[0].getCertID();
+                    CertificateID certID1 = ocspReq.getRequestList()[1].getCertID();
+                   /* System.out.println(certID.getIssuerNameHash().hashCode());
+                    System.out.println(certID1.getIssuerNameHash().hashCode());
+                    System.out.println(caCert.getIssuerX500Principal().getName().hashCode());
+                    System.out.println(certID.getIssuerKeyHash().hashCode());
+                    System.out.println(certID1.getIssuerKeyHash().hashCode());
+                    System.out.println(caCert.getPublicKey().getEncoded().hashCode());*/
+                    System.out.println();
                     byte[] hash = certID.getIssuerNameHash();
                     byte[] key = certID.getIssuerKeyHash();
                     BigInteger serialNumber = certID.getSerialNumber();
                     PublicKey publicKey = caCert.getPublicKey();
-                    SubjectPublicKeyInfo pubKeyInfo = SubjectPublicKeyInfo.getInstance(publicKey.getEncoded());
                     JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
                     ResponderID responderID = new ResponderID(ASN1OctetString.getInstance(extUtils.createSubjectKeyIdentifier(publicKey)));
 
@@ -115,12 +119,20 @@ public class OCSPServer {
 
 
                     // Check if the request is for this certificate
-                    if (caCert.getSerialNumber().equals(serialNumber)
-                            && caCert.getIssuerX500Principal().getName().hashCode() == hash.hashCode()
-                            && caCert.getPublicKey().getEncoded().hashCode() == key.hashCode()) {
+//                    if (caCert.getSerialNumber().equals(serialNumber)
+//                            && caCert.getIssuerX500Principal().getName().hashCode() == hash.hashCode()
+//                            && caCert.getPublicKey().getEncoded().hashCode() == key.hashCode()) {
+//                        CertificateStatus certStatus = getCertificateStatus();
+//                        builder.addResponse(certID, certStatus);
+//                    }
+                    if (caCert.getIssuerX500Principal().equals(certID.getIssuerNameHash())
+                            && Arrays.equals(caCert.getPublicKey().getEncoded(), certID.getIssuerKeyHash())) {
                         CertificateStatus certStatus = getCertificateStatus();
                         builder.addResponse(certID, certStatus);
                     }
+                    CertificateStatus certStatus = getCertificateStatus();
+                    builder.addResponse(certID, certStatus);
+                    builder.addResponse(certID1, certStatus);
                     // PrivateKey privateKey = ... // Здесь нужно загрузить приватный ключ для подписи
                     AlgorithmIdentifier signatureAlgorithm = new DefaultSignatureAlgorithmIdentifierFinder().find("SHA256withRSA");
 
@@ -133,14 +145,15 @@ public class OCSPServer {
 
                     BasicOCSPResp basicOCSPResp = builder.build(contentSigner, null, new Date());
 
-                   // OCSPResp ocspResp = new OCSPResp(OCSPResponse.getInstance(builder.build(contentSigner, null, new Date())));
+                   // OCSPResponse ocspResponse = new OCSPResponse();
+                    //OCSPResp ocspResp = new OCSPResp(ocspResponse);
                     // send the OCSP response
-
 
                     // отправка ответа клиенту
                     byte[] ocspResponseBytes = basicOCSPResp.getEncoded();
                     oos.writeInt(ocspResponseBytes.length);
                     oos.write(ocspResponseBytes);
+                    oos.writeUTF(ocspName);
                     oos.flush();
                     while (!clientSocket.isOutputShutdown() && oos.size() > 0) {
                         clientSocket.getOutputStream().flush();
@@ -253,12 +266,13 @@ public class OCSPServer {
 
     }
 
-    private static CertificateStatus getCertificateStatus() throws CertificateEncodingException {
+    private static CertificateStatus getCertificateStatus() {
         // Check the certificate status
-        return new RevokedStatus(new Date(), 0);
-        //return CertificateStatus.GOOD;
-        //return new UnknownStatus();
+        // return new RevokedStatus(new Date(), 0);  // set the certificate status as revoked
+         return CertificateStatus.GOOD;  // set the certificate status as good
+        //return new UnknownStatus();  // set the certificate status as unknown
     }
+
 
     public static OCSPResp makeOcspResponse(
             X509Certificate caCert, PrivateKey caPrivateKey, OCSPReq ocspReq)
