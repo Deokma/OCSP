@@ -8,7 +8,6 @@ import org.bouncycastle.asn1.pkcs.CertificationRequestInfo;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
-import org.bouncycastle.asn1.x509.TBSCertificate;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
 import java.io.*;

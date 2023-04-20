@@ -6,6 +6,7 @@
 //import javax.xml.crypto.Data;
 //import java.util.Date;
 //
+// TODO нужно понять как это работает
 //public interface CertificateStatus extends org.bouncycastle.cert.ocsp.CertificateStatus {
 //    CertificateStatus GOOD = (CertificateStatus) org.bouncycastle.cert.ocsp.CertificateStatus.GOOD;
 //    CertificateStatus REVOKED = (CertificateStatus) new RevokedStatus(new Date(),0);

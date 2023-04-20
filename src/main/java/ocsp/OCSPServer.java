@@ -1,25 +1,21 @@
 package ocsp;
 
 import ca.CertificateAuthority;
-import org.bouncycastle.asn1.*;
-import org.bouncycastle.asn1.ocsp.*;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.asn1.ASN1OctetString;
+import org.bouncycastle.asn1.DERBitString;
+import org.bouncycastle.asn1.DERNull;
+import org.bouncycastle.asn1.ocsp.ResponderID;
 import org.bouncycastle.asn1.pkcs.CertificationRequest;
 import org.bouncycastle.asn1.pkcs.CertificationRequestInfo;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.*;
-import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.ocsp.*;
-import org.bouncycastle.cert.ocsp.jcajce.JcaBasicOCSPRespBuilder;
-import org.bouncycastle.cert.ocsp.jcajce.JcaCertificateID;
-import org.bouncycastle.operator.*;
-import org.bouncycastle.operator.bc.BcDefaultDigestProvider;
-import org.bouncycastle.operator.bc.BcDigestCalculatorProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.DefaultSignatureAlgorithmIdentifierFinder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
-import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
 import java.io.*;
@@ -27,18 +23,16 @@ import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.security.Signature;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Scanner;
 
 public class OCSPServer {
     static int port = 8888;
@@ -86,27 +80,42 @@ public class OCSPServer {
                     int ocspRequestLength = ois.readInt();
                     // создать буфер для запроса
                     byte[] ocspRequest = new byte[ocspRequestLength];
+                    System.out.println(Arrays.hashCode(ocspRequest));
+                    System.out.println(ocspRequest.hashCode());
                     // считать запрос в буфер
                     ois.readFully(ocspRequest);
-
+                    System.out.println(Arrays.hashCode(ocspRequest));
+                    System.out.println(ocspRequest.hashCode());
                     // создать объект OCSPRequest из буфера с запросом
                     OCSPReq ocspReq = new OCSPReq(ocspRequest);
                     // TODO проверка на содержание
-                    System.out.println(ocspReq.getRequestList().length);
-
-                    System.out.println(ocspReq.getRequestorName());
+//                    System.out.println(ocspReq.getRequestList().length);
+//                    System.out.println(ocspReq.getRequestorName());
 
                     CertificateID certID = ocspReq.getRequestList()[0].getCertID();
                     CertificateID certID1 = ocspReq.getRequestList()[1].getCertID();
-                   /* System.out.println(certID.getIssuerNameHash().hashCode());
-                    System.out.println(certID1.getIssuerNameHash().hashCode());
-                    System.out.println(caCert.getIssuerX500Principal().getName().hashCode());
-                    System.out.println(certID.getIssuerKeyHash().hashCode());
-                    System.out.println(certID1.getIssuerKeyHash().hashCode());
-                    System.out.println(caCert.getPublicKey().getEncoded().hashCode());*/
-                    System.out.println();
+
+//                    System.out.println(Arrays.hashCode(certID.getIssuerNameHash()));
+//                    System.out.println(Arrays.toString(certID.getIssuerNameHash()));
+//                    System.out.println(certID.getIssuerNameHash().hashCode());
+//                    //System.out.println(certID1.getIssuerNameHash());
+//                    System.out.println(caCert.getIssuerX500Principal().getName());
+//                    System.out.println(caCert.getIssuerX500Principal().getName().hashCode());
+//
+//                    System.out.println(certID.getIssuerKeyHash().hashCode());
+//                   // System.out.println(certID1.getIssuerKeyHash().hashCode());
+//                    System.out.println(caCert.getPublicKey().getEncoded().hashCode());
+//                    System.out.println();
                     byte[] hash = certID.getIssuerNameHash();
                     byte[] key = certID.getIssuerKeyHash();
+                    byte[] issuerNameHash = null;
+                    try {
+                        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                        issuerNameHash = digest.digest(caCert.getIssuerX500Principal().getName().getBytes(StandardCharsets.UTF_8));
+                    } catch (NoSuchAlgorithmException e) {
+                        e.printStackTrace();
+                    }
+                    System.out.println(Arrays.equals(issuerNameHash, certID.getIssuerNameHash()));
                     BigInteger serialNumber = certID.getSerialNumber();
                     PublicKey publicKey = caCert.getPublicKey();
                     JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
@@ -115,9 +124,6 @@ public class OCSPServer {
                     RespID respID = new RespID(ResponderID.getInstance(responderID.toASN1Primitive()));
                     BasicOCSPRespBuilder builder = new BasicOCSPRespBuilder(respID);
 
-                    //BasicOCSPRespBuilder builder = new BasicOCSPRespBuilder((RespID) ocspCertificate.getPublicKey());
-
-
                     // Check if the request is for this certificate
 //                    if (caCert.getSerialNumber().equals(serialNumber)
 //                            && caCert.getIssuerX500Principal().getName().hashCode() == hash.hashCode()
@@ -125,8 +131,8 @@ public class OCSPServer {
 //                        CertificateStatus certStatus = getCertificateStatus();
 //                        builder.addResponse(certID, certStatus);
 //                    }
-                    if (caCert.getIssuerX500Principal().equals(certID.getIssuerNameHash())
-                            && Arrays.equals(caCert.getPublicKey().getEncoded(), certID.getIssuerKeyHash())) {
+                    if (caCert.getIssuerX500Principal().equals(hash)
+                            && Arrays.equals(caCert.getPublicKey().getEncoded(), key)) {
                         CertificateStatus certStatus = getCertificateStatus();
                         builder.addResponse(certID, certStatus);
                     }
@@ -136,11 +142,11 @@ public class OCSPServer {
                     // PrivateKey privateKey = ... // Здесь нужно загрузить приватный ключ для подписи
                     AlgorithmIdentifier signatureAlgorithm = new DefaultSignatureAlgorithmIdentifierFinder().find("SHA256withRSA");
 
-// Create the digest calculator provider
-                   // BcDigestCalculatorProvider digestProvider = new BcDigestCalculatorProvider();
+                    // Create the digest calculator provider
+                    // BcDigestCalculatorProvider digestProvider = new BcDigestCalculatorProvider();
 
-// Get the digest calculator for the algorithm
-                  //  DigestCalculator digestCalculator = digestProvider.get(signatureAlgorithm);
+                    // Get the digest calculator for the algorithm
+                    //  DigestCalculator digestCalculator = digestProvider.get(signatureAlgorithm);
                     ContentSigner contentSigner = new JcaContentSignerBuilder("SHA256WithRSA").build(ocspKey);
 
                     BasicOCSPResp basicOCSPResp = builder.build(contentSigner, null, new Date());
@@ -155,10 +161,10 @@ public class OCSPServer {
                     oos.write(ocspResponseBytes);
                     oos.writeUTF(ocspName);
                     oos.flush();
-                    while (!clientSocket.isOutputShutdown() && oos.size() > 0) {
-                        clientSocket.getOutputStream().flush();
-                        Thread.sleep(500);
-                    }
+//                    while (!clientSocket.isOutputShutdown() && oos.size() > 0) {
+//                        clientSocket.getOutputStream().flush();
+//                        Thread.sleep(500);
+//                    }
                     clientSocket.setSoTimeout(10000);
 
                 } catch (IOException e) {
@@ -175,95 +181,7 @@ public class OCSPServer {
                     }
                 }
             }).start();
-
-
-            // получить длину байтового потока с запросом
-            //int ocspRequestLength = ois.readInt();
-            // создать буфер для запроса
-            //byte[] ocspRequest = new byte[ocspRequestLength];
-            // считать запрос в буфер
-            //ois.readFully(ocspRequest);
-
-            // создать объект OCSPRequest из буфера с запросом
-            //OCSPRequest request = OCSPRequest.getInstance(ocspRequest);
-
-            // проверить, что запрос сформирован правильно
-            // String response = handleRequest(request);
-            //if (response == null) {
-            // если запрос невалиден, отправить сообщение об ошибке
-            //   oos.writeUTF("OCSP request is invalid");
-            //} else {
-            // если запрос валиден, обработать его и отправить ответ
-//                OCSPResponseStatus status = new OCSPResponseStatus(1);
-//                OCSPResponse ocspResponse = new OCSPResponse(status, null);
-//                byte[] buffer = ocspResponse.getEncoded();
-//
-//                oos.writeInt(buffer.length);
-//                oos.write(buffer);
-//                oos.flush();
-//                clientSocket.setSoTimeout(10000);
-            //byte[] ocspResponse = // получить ответ в виде байтового потока
-            //      oos.writeInt(ocspResponse.length); // отправить длину байтового потока
-            //oos.write(ocspResponse); // отправить байтовый поток
         }
-
-// очистить поток
-        // oos.flush();
-
-        //String entry = in.readUTF();
-
-        //System.out.println("READ from client message - " + entry);
-
-//            if (entry.equalsIgnoreCase("quit")) {
-//                System.out.println("Client initialize connections suicide ...");
-//                out.writeUTF("Server reply - " + entry + " - OK");
-//                out.flush();
-//                break;
-//            }
-
-        // Обрабатываем запрос клиента в новом потоке
-//            new Thread(() -> {
-//                //String response = handleRequest(entry);
-//                try {
-//                    if (response == null) {
-//                        // если запрос невалиден, отправить сообщение об ошибке
-//                        oos.writeUTF("OCSP request is invalid");
-//                    } else {
-//                        // если запрос валиден, обработать его и отправить ответ
-//                        OCSPResponseStatus status = new OCSPResponseStatus(1);
-//                        OCSPResponse ocspResponse = new OCSPResponse(status, null);
-//                        byte[] buffer = ocspResponse.getEncoded();
-//
-//                        oos.writeInt(buffer.length);
-//                        oos.write(buffer);
-//                        oos.flush();
-//                        clientSocket.setSoTimeout(10000);
-//                        //byte[] ocspResponse = // получить ответ в виде байтового потока
-//                        //      oos.writeInt(ocspResponse.length); // отправить длину байтового потока
-//                        //oos.write(ocspResponse); // отправить байтовый поток
-//                    }
-//                } catch (IOException e) {
-//                    throw new RuntimeException(e);
-//                }
-//
-////                try {
-////                    // Отправляем ответ клиенту
-////                    out.writeUTF(response);
-////                    out.flush();
-////                } catch (IOException e) {
-////                    e.printStackTrace();
-////                } finally {
-////                    try {
-////                        // Закрываем соединение с клиентом
-////                        clientSocket.close();
-////                        System.out.println("Соединение с клиентом " + clientSocket.getInetAddress() + " закрыто");
-////                    } catch (IOException e) {
-////                        e.printStackTrace();
-////                    }
-////                }
-//            }).start();
-
-
     }
 
     private static CertificateStatus getCertificateStatus() {
@@ -273,26 +191,7 @@ public class OCSPServer {
         //return new UnknownStatus();  // set the certificate status as unknown
     }
 
-
-    public static OCSPResp makeOcspResponse(
-            X509Certificate caCert, PrivateKey caPrivateKey, OCSPReq ocspReq)
-            throws OCSPException, OperatorCreationException, CertificateEncodingException {
-        DigestCalculatorProvider digCalcProv = new JcaDigestCalculatorProviderBuilder()
-                .setProvider("BCFIPS").build();
-        BasicOCSPRespBuilder respGen = new JcaBasicOCSPRespBuilder(
-                caCert.getPublicKey(), digCalcProv.get(RespID.HASH_SHA1));
-        CertificateID certID = ocspReq.getRequestList()[0].getCertID();
-        // magic happens…
-        respGen.addResponse(certID, CertificateStatus.GOOD);
-        BasicOCSPResp resp = respGen.build(
-                new JcaContentSignerBuilder("SHA384withECDSA").setProvider("BCFIPS").build(caPrivateKey),
-                new X509CertificateHolder[]{new JcaX509CertificateHolder(caCert)},
-                new Date());
-        OCSPRespBuilder rGen = new OCSPRespBuilder();
-        return rGen.build(OCSPRespBuilder.SUCCESSFUL, resp);
-    }
-
-    public static boolean isGoodCertificate(
+    /*public static boolean isGoodCertificate(
             OCSPResp ocspResp, X509Certificate caCert, X509Certificate eeCert)
             throws OperatorCreationException, OCSPException, CertificateEncodingException {
         DigestCalculatorProvider digCalcProv = new JcaDigestCalculatorProviderBuilder()
@@ -312,163 +211,9 @@ public class OCSPServer {
             }
         }
         throw new IllegalStateException("OCSP Request Failed");
-    }
+    }*/
 
     // Метод для обработки OCSP запросов
-    private static byte[] handleOcspRequest(OCSPRequest request) throws IOException, CertificateException, OperatorCreationException, OCSPException, NoSuchAlgorithmException, InvalidKeySpecException {
-        // TODO: Здесь нужно добавить код для обработки OCSP запросов
-        // Получить TBSRequest из OCSPRequest
-        TBSRequest tbsRequest = request.getTbsRequest();
-
-        // Открыть файл сертификата
-        FileInputStream fis = new FileInputStream(ocspServerPath + "clientMyOCSPCert.crt");
-        // Создать объект CertificateFactory
-        CertificateFactory cf = CertificateFactory.getInstance("X.509");
-        // Получить сертификат из потока
-        X509Certificate signingCert = (X509Certificate) cf.generateCertificate(fis);
-        // Закрыть поток ввода
-        fis.close();
-
-        File keyFile = new File(ocspServerPath + "privateKey.key");
-        byte[] keyBytes = Files.readAllBytes(keyFile.toPath());
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-        KeyFactory keyFactory = KeyFactory.getInstance("RSA"); // или другой алгоритм
-        PrivateKey privateKey = keyFactory.generatePrivate(keySpec);
-
-
-        // Получить список сертификатов из TBSRequest
-        ASN1Sequence certSequence = tbsRequest.getRequestList();
-        ASN1Encodable[] certList = certSequence.toArray();
-        List<X509Certificate> certificates = new ArrayList<>();
-        for (ASN1Encodable certEncodable : certList) {
-            X509Certificate cert;
-            try {
-                cert = new JcaX509CertificateConverter().getCertificate(
-                        new X509CertificateHolder(certEncodable.toASN1Primitive().getEncoded())
-                );
-                certificates.add(cert);
-            } catch (CertificateException e) {
-                e.printStackTrace();
-            }
-        }
-
-        // Создать объект BasicOCSPRespBuilder
-        BasicOCSPRespBuilder builder = new JcaBasicOCSPRespBuilder(
-                signingCert.getPublicKey(), new JcaDigestCalculatorProviderBuilder().setProvider("BC").build().get(CertificateID.HASH_SHA1)
-        );
-
-// Добавить статусы проверки сертификатов
-        for (X509Certificate cert : certificates) {
-            CertificateID certId;
-            try {
-                certId = new CertificateID(
-                        new JcaDigestCalculatorProviderBuilder()
-                                .setProvider("BC")
-                                .build()
-                                .get(CertificateID.HASH_SHA1),
-                        new JcaX509CertificateHolder(cert),
-                        cert.getSerialNumber()
-                );
-
-                builder.addResponse(certId,
-                        new RevokedStatus(
-                                new RevokedInfo(
-                                        new ASN1GeneralizedTime(new Date()),
-                                        CRLReason.lookup(CRLReason.keyCompromise)
-                                )
-                        )
-                );
-
-
-            } catch (OCSPException | CertificateEncodingException e) {
-                e.printStackTrace();
-            }
-        }
-
-// Создать объект BasicOCSPResp
-        BasicOCSPResp ocspResp = builder.build(
-                new JcaContentSignerBuilder("SHA1withRSA").setProvider("BC").build(privateKey),
-                new org.bouncycastle.cert.X509CertificateHolder[]{new JcaX509CertificateHolder(signingCert)},
-                new Date()
-        );
-
-
-// Получить байты BasicOCSPResp
-        return ocspResp.getEncoded();
-
-        //return null;
-    }
-
-//    private static byte[] handleOcspRequest(OCSPRequest request) throws Exception {
-//        // Получить список сертификатов из запроса
-//        ASN1Sequence certs = request.getTbsRequest().getRequestList();
-//        List<X509Certificate> certsList = new ArrayList<>();
-//
-//        // Открыть файл сертификата
-//        FileInputStream fis = new FileInputStream(ocspServerPath + "clientMyOCSPCert.crt");
-//// Создать объект CertificateFactory
-//        CertificateFactory cf = CertificateFactory.getInstance("X.509");
-//// Получить сертификат из потока
-//        X509Certificate signingCert = (X509Certificate) cf.generateCertificate(fis);
-//// Закрыть поток ввода
-//        fis.close();
-//
-//        // Парсить каждый сертификат из последовательности
-//        for (int i = 0; i < certs.size(); i++) {
-//            X509CertificateHolder holder = (X509CertificateHolder) certs.getObjectAt(i);
-//            try {
-//                X509Certificate cert = new JcaX509CertificateConverter().getCertificate(holder);
-//                certsList.add(cert);
-//            } catch (CertificateException e) {
-//                e.printStackTrace();
-//            }
-//        }
-//
-//        // Создать генератор OCSP ответа
-//        JcaBasicOCSPRespBuilder builder = new JcaBasicOCSPRespBuilder((PublicKey) new X509CertificateHolder(signingCert.getEncoded()), (DigestCalculator) new JcaDigestCalculatorProviderBuilder().build());
-//
-//// Добавить статус проверки для каждого сертификата
-//        for (X509Certificate cert : certsList) {
-//            CertificateID id = new CertificateID(new JcaDigestCalculatorProviderBuilder().build().get(CertificateID.HASH_SHA1), new X509CertificateHolder(cert.getEncoded()), cert.getSerialNumber());
-//            builder.addRevokedResponse(id, new Date(), CRLReason.unspecified);
-//        }
-//
-//        BasicOCSPResp response = builder.build(new JcaContentSignerBuilder("SHA256withRSA").build(signingKey), null, null);
-//        return response.getEncoded();
-//
-//        try {
-//            ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA").build(signingKey);
-//            response = builder.build(signer, null, new Date());
-//        } catch (OperatorCreationException e) {
-//            e.printStackTrace();
-//        } catch (OCSPException e) {
-//            e.printStackTrace();
-//        }
-//
-//        // Конвертировать OCSP ответ в байтовый массив
-//        byte[] encoded = response.getEncoded();
-//        return encoded;
-//    }
-
-
-    private static Key getKeyFromKeyStore(String keystorePath, String keystorePassword, String keyAlias) throws Exception {
-        FileInputStream is = new FileInputStream(keystorePath);
-        KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
-        keystore.load(is, keystorePassword.toCharArray());
-        Key key = keystore.getKey(keyAlias, keystorePassword.toCharArray());
-        return key;
-    }
-
-
-    public static String handleRequest(OCSPRequest request) {
-        // Обработка запроса клиента
-//        if (request.equalsIgnoreCase("hello")) {
-//            return "Привет, клиент!";
-//        } else {
-//            return "Я не знаю, что ответить на это сообщение";
-//        }
-        return "Всё ок";
-    }
 
     public static void checkOCSPNameFile() throws IOException, ClassNotFoundException {
         if (!new File(ocspServerPath + "ocspName.dat").exists()) {
