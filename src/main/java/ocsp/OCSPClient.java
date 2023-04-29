@@ -1,7 +1,10 @@
 package ocsp;
 
 import org.bouncycastle.asn1.ASN1Encodable;
-import org.bouncycastle.asn1.ocsp.*;
+import org.bouncycastle.asn1.ASN1TaggedObject;
+import org.bouncycastle.asn1.ocsp.OCSPResponse;
+import org.bouncycastle.asn1.ocsp.ResponseData;
+import org.bouncycastle.asn1.ocsp.SingleResponse;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.cert.ocsp.*;
@@ -20,18 +23,16 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
 public class OCSPClient {
-    static String subjectName;
-    static String subjectNamePath = "src/main/resources/client/ocsp/subjectName.dat";
-    static String subjectPath = "src/main/resources/client/ocsp/";
-    static String certificatesPath = "src/main/resources/client/ocsp/certificates/";
-    static String keysPath = "src/main/resources/client/ca/";
+    static int port = 8888;
+    static String serverHostName = "localhost";
+    static String clientName;
+    static String clientNamePath = "src/main/resources/client/ocsp/";
+    static String certificatesPath = "../client/ocsp/certificates/";
     private static final DigestCalculatorProvider DIG_CALC_PROV;
-    static String caCertPath = "src/main/resources/ca/server/caCert.crt";
 
     static {
         try {
@@ -43,11 +44,11 @@ public class OCSPClient {
     }
 
     public static void main(String[] args) throws IOException, ClassNotFoundException {
-
+        new File(clientNamePath).mkdirs();
+        new File(certificatesPath).mkdirs();
         checkSubjNameFile();
         // запускаем подключение сокета по известным координатам и инициализируем приём сообщений с консоли клиента
-        try (Socket socket = new Socket("localhost", 8888);
-             // BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        try (Socket socket = new Socket(serverHostName, port);
              DataOutputStream oos = new DataOutputStream(socket.getOutputStream());
              DataInputStream ois = new DataInputStream(socket.getInputStream());) {
 
@@ -56,21 +57,23 @@ public class OCSPClient {
             // проверяем живой ли канал и работаем если живой
             while (true) {
 
-                Thread.sleep(1000);
+                File folder = new File(certificatesPath);
+                File[] files = folder.listFiles();
 
-                FileInputStream fis = new FileInputStream(certificatesPath + "clientЭтот клиентCert.crt");
-                CertificateFactory cf = CertificateFactory.getInstance("X.509");
-                X509Certificate userCertificate = (X509Certificate) cf.generateCertificate(fis);
-                fis = new FileInputStream(certificatesPath + "clientЭтот OCSPCert.crt");
-                X509Certificate userCertificate1 = (X509Certificate) cf.generateCertificate(fis);
-                fis = new FileInputStream(caCertPath);
-                X509Certificate caCert = (X509Certificate) cf.generateCertificate(fis);
                 List<X509Certificate> certsToCheck = new ArrayList<>();
-                certsToCheck.add(userCertificate);
-                certsToCheck.add(userCertificate1);
+
+                for (File file : files) {
+                    if (file.isFile() && file.getName().endsWith(".crt")) {
+                        FileInputStream fis = new FileInputStream(file);
+                        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                        X509Certificate cert = (X509Certificate) cf.generateCertificate(fis);
+                        certsToCheck.add(cert);
+                        fis.close();
+                    }
+                }
 
                 // добавить сертификаты в список certsToCheck
-                OCSPReq ocspRequest = makeOcspRequest(caCert, certsToCheck, subjectName, DIG_CALC_PROV); // получить запрос в виде байтового потока
+                OCSPReq ocspRequest = makeOcspRequest(certsToCheck, clientName, DIG_CALC_PROV); // получить запрос в виде байтового потока
                 byte[] ocspRequestByte = ocspRequest.getEncoded();
 
                 oos.writeInt(ocspRequestByte.length); // отправить длину байтового потока
@@ -79,19 +82,6 @@ public class OCSPClient {
 
                 // ждём чтобы сервер успел прочесть сообщение из сокета и ответить
                 try {
-                    // получить длину байтового потока с ответом BasicOCSPResp
-                    int basicResponseLength = ois.readInt();
-                    byte[] basicOcspResponse = new byte[basicResponseLength];
-
-
-                    int totalBasicBytesRead = 0;
-                    while (totalBasicBytesRead < basicResponseLength) {
-                        int basicBytesRead = ois.read(basicOcspResponse, totalBasicBytesRead, basicResponseLength - totalBasicBytesRead);
-                        if (basicBytesRead == -1) {
-                            throw new RuntimeException("End of stream reached before all data could be read");
-                        }
-                        totalBasicBytesRead += basicBytesRead;
-                    }
                     // получить длину байтового потока с ответом OCSPResp
                     int responseLength = ois.readInt();
                     byte[] ocspResponse = new byte[responseLength];
@@ -105,25 +95,32 @@ public class OCSPClient {
                         totalBytesRead += bytesRead;
                     }
                     // считать ответ в буфер
-                    BasicOCSPResp basicResp = new BasicOCSPResp(BasicOCSPResponse.getInstance(basicOcspResponse));
                     OCSPResp ocspResp = new OCSPResp(OCSPResponse.getInstance(ocspResponse));
-                    // Печать значений
-
-                    String certificateStatus = OCSPUtils.getCertificateStatus(ocspResp);
+                    BasicOCSPResp basicResp = (BasicOCSPResp) ocspResp.getResponseObject();
 
                     ResponseData responseData = ResponseData.getInstance(basicResp.getTBSResponseData());
-                    System.out.println("#-----------------------------------------------#");
                     System.out.println("Response Version: " + basicResp.getVersion());
                     System.out.println("OCSPName: " + ois.readUTF());
                     System.out.println("producedAt: " + basicResp.getProducedAt());
+                    System.out.println("OCSPResponse status: " + ocspResp.getStatus());
+                    System.out.println("#-----------------------------------------------#");
                     for (ASN1Encodable responses : responseData.getResponses()) {
                         SingleResponse singleResponse = SingleResponse.getInstance(responses.toASN1Primitive());
-                        System.out.println("Identification: " + singleResponse.getCertID().toASN1Primitive());
-                        System.out.println("Status: \u001B[32m" + certificateStatus + "\u001B[0m");
+                        System.out.println("Identification: " + singleResponse.getCertID());
+                        ASN1TaggedObject taggedStatus = ASN1TaggedObject.getInstance(singleResponse.getCertStatus().toASN1Primitive());
+                        if (taggedStatus.getTagNo() == 0) {
+                            System.out.println("Status: GOOD");
+                        }
+                        if (taggedStatus.getTagNo() == 1) {
+                            System.out.println("Status: REVOKED");
+                        }
+                        if (taggedStatus.getTagNo() == 2) {
+                            System.out.println("Status: UNKNOWN");
+                        }
                         System.out.println("ThisUpdate: " + singleResponse.getThisUpdate().getDate());
                         System.out.println("NextUpdate: " + singleResponse.getNextUpdate());
+                        System.out.println("#-----------------------------------------------#");
                     }
-                    System.out.println("#-----------------------------------------------#");
                     //Thread.sleep(10000);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -133,11 +130,9 @@ public class OCSPClient {
         } catch (ConnectException e) {
             // TODO Auto-generated catch block
             System.out.println("Проблемы соединения с сервером");
-            //e.printStackTrace();
         } catch (SocketException e) {
 
             System.out.println("\nХост разорвал соединение");
-            //e.printStackTrace();
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
@@ -146,21 +141,38 @@ public class OCSPClient {
         }
     }
 
+    /**
+     * Проверка на наличие файла с именем OCSPClient
+     *
+     * @throws IOException
+     * @throws ClassNotFoundException
+     */
     public static void checkSubjNameFile() throws IOException, ClassNotFoundException {
-        if (!new File(subjectNamePath).exists()) {
+        if (!new File(clientNamePath + "clientName.dat").exists()) {
             Scanner scanner = new Scanner(System.in);
             System.out.print("Пожалуйста введите имя пользователя: ");
-            subjectName = scanner.nextLine();
-            ObjectOutputStream subjectNameOut = new ObjectOutputStream(new FileOutputStream(subjectNamePath));
-            subjectNameOut.writeObject(subjectName);
+            clientName = scanner.nextLine();
+            ObjectOutputStream subjectNameOut = new ObjectOutputStream(new FileOutputStream(clientNamePath + "clientName.dat"));
+            subjectNameOut.writeObject(clientName);
             subjectNameOut.close();
         } else {
-            ObjectInputStream subjectNameIn = new ObjectInputStream(new FileInputStream(subjectNamePath));
-            subjectName = (String) subjectNameIn.readObject();
+            ObjectInputStream subjectNameIn = new ObjectInputStream(new FileInputStream(clientNamePath + "clientName.dat"));
+            clientName = (String) subjectNameIn.readObject();
         }
     }
 
-    public static OCSPReq makeOcspRequest(X509Certificate caCert, List<X509Certificate> certsToCheck, String ocspClientName, DigestCalculatorProvider digCalcProv) throws OperatorCreationException, OCSPException, CertificateEncodingException {
+    /**
+     * Создание OCSP Request
+     *
+     * @param certsToCheck   Список сертификатов на проверку
+     * @param ocspClientName Имя OCSP клиента
+     * @param digCalcProv    интерфейс для вычисления хэш суммы
+     * @return ocspRequest
+     * @throws OperatorCreationException
+     * @throws OCSPException
+     * @throws CertificateEncodingException
+     */
+    public static OCSPReq makeOcspRequest(List<X509Certificate> certsToCheck, String ocspClientName, DigestCalculatorProvider digCalcProv) throws OperatorCreationException, OCSPException, CertificateEncodingException {
         // basic request generation
         OCSPReqBuilder gen = new OCSPReqBuilder();
         if (ocspClientName != null && !ocspClientName.isEmpty()) {
@@ -169,7 +181,7 @@ public class OCSPClient {
         for (X509Certificate cert : certsToCheck) {
             // general id value for our test issuer cert and a serial number.
             CertificateID certId = new JcaCertificateID(
-                    digCalcProv.get(CertificateID.HASH_SHA1), caCert, cert.getSerialNumber());
+                    digCalcProv.get(CertificateID.HASH_SHA1), cert, cert.getSerialNumber());
             gen.addRequest(certId);
         }
         return gen.build();

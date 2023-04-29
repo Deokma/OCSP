@@ -25,16 +25,17 @@ import java.util.Scanner;
 public class CAClient {
     static String serverHostname = "localhost"; // Имя сервера, к которому подключаемся
     static int port = 9999; // Порт сервера
-    static String subjectName;
-    static String subjectNamePath = "src/main/resources/client/ca/subjectName.dat";
-    static String subjectPath = "src/main/resources/client/ca/";
+    static String clientName;
+    static String clientNamePath = "src/main/resources/client/ca/";
+    static String clientPath = "../client/ca/";
 
     public static void main(String[] args) throws IOException, ClassNotFoundException {
-
+        new File(clientNamePath).mkdirs();
+        new File(clientPath).mkdirs();
 
         checkSubjNameFile();
 
-        X500Name subject = new X500Name("CN=" + subjectName);
+        X500Name subject = new X500Name("CN=" + clientName);
 
         try {
             // Создаем сокет и подключаемся к серверу
@@ -49,21 +50,21 @@ public class CAClient {
             keyGen.initialize(2048);
             KeyPair keyPair = keyGen.generateKeyPair();
 
-            if (!new File(subjectPath + "privateKey.key").exists()) {
+            if (!new File(clientPath + "privateKey.key").exists()) {
                 // Сохраняем приватный ключ в файл
                 PrivateKey privateKey = keyPair.getPrivate();
                 byte[] privateKeyEncoded = privateKey.getEncoded();
                 PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privateKeyEncoded);
-                FileOutputStream privateKeyStream = new FileOutputStream(subjectPath + "privateKey.key");
+                FileOutputStream privateKeyStream = new FileOutputStream(clientPath + "privateKey.key");
                 privateKeyStream.write(privateKeySpec.getEncoded());
                 privateKeyStream.close();
             }
-            if (!new File(subjectPath + "publicKey.key").exists()) {
+            if (!new File(clientPath + "publicKey.key").exists()) {
                 // Сохраняем публичный ключ в файл
                 PublicKey publicKey = keyPair.getPublic();
                 byte[] publicKeyEncoded = publicKey.getEncoded();
                 X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(publicKeyEncoded);
-                FileOutputStream publicKeyStream = new FileOutputStream(subjectPath + "publicKey.key");
+                FileOutputStream publicKeyStream = new FileOutputStream(clientPath + "publicKey.key");
                 publicKeyStream.write(publicKeySpec.getEncoded());
                 publicKeyStream.close();
             }
@@ -109,7 +110,7 @@ public class CAClient {
                 bytesRead += count;
             }
             // Сохраняем ответ в файл
-            FileOutputStream fos = new FileOutputStream("../" + in.readUTF());
+            FileOutputStream fos = new FileOutputStream(clientPath + in.readUTF());
             fos.write(fileBytes);
             fos.close();
 
@@ -132,16 +133,16 @@ public class CAClient {
     }
 
     public static void checkSubjNameFile() throws IOException, ClassNotFoundException {
-        if (!new File(subjectNamePath).exists()) {
+        if (!new File(clientNamePath + "subjectName.dat").exists()) {
             Scanner scanner = new Scanner(System.in);
-            System.out.print("Пожалуйства введите имя пользователя: ");
-            subjectName = scanner.nextLine();
-            ObjectOutputStream subjectNameOut = new ObjectOutputStream(new FileOutputStream(subjectNamePath));
-            subjectNameOut.writeObject(subjectName);
+            System.out.print("Пожалуйста введите имя пользователя: ");
+            clientName = scanner.nextLine();
+            ObjectOutputStream subjectNameOut = new ObjectOutputStream(new FileOutputStream(clientNamePath + "subjectName.dat"));
+            subjectNameOut.writeObject(clientName);
             subjectNameOut.close();
         } else {
-            ObjectInputStream subjectNameIn = new ObjectInputStream(new FileInputStream(subjectNamePath));
-            subjectName = (String) subjectNameIn.readObject();
+            ObjectInputStream subjectNameIn = new ObjectInputStream(new FileInputStream(clientNamePath + "subjectName.dat"));
+            clientName = (String) subjectNameIn.readObject();
         }
     }
 }

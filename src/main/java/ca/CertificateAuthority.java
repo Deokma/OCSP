@@ -23,20 +23,33 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Date;
 
+/**
+ * Класс для создания объекта УЦ и дальнейших манипуляций с ним
+ */
 public class CertificateAuthority implements Serializable {
     private KeyPair keyPair;
     private final X500Name issuer;
     private BigInteger serialNumber;
 
-    public CertificateAuthority(String caName) throws NoSuchAlgorithmException, NoSuchProviderException {
+    public CertificateAuthority(String caName) throws NoSuchAlgorithmException {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048, new SecureRandom());
-        String caNameToX500 = "CN=" + caName;
         this.keyPair = keyPairGenerator.generateKeyPair();
         this.issuer = new X500Name("CN=" + caName);
         this.serialNumber = BigInteger.ONE;
     }
 
+    /**
+     * Выдать сертификат
+     * @param publicKey Сгенерированный публичный ключ клиента
+     * @param startDate Дата подписания сертификата
+     * @param endDate Дата истечения срока сертификата
+     * @param clientName Имя клиента
+     * @return сертификат клиента
+     * @throws OperatorCreationException
+     * @throws CertificateException
+     * @throws CertIOException
+     */
     public X509Certificate issueCertificate(PublicKey publicKey, Date startDate, Date endDate, String clientName) throws OperatorCreationException, CertificateException, CertIOException {
         X500Name subject = new X500Name("CN=" + clientName);
         X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(issuer, serialNumber, startDate, endDate, subject, publicKey);
@@ -56,6 +69,11 @@ public class CertificateAuthority implements Serializable {
         return certificate;
     }
 
+    /**
+     * Сохранить приватный ключ в файл
+     * @param fileName имя файла
+     * @throws IOException
+     */
     public void savePrivateKey(String fileName) throws IOException {
         byte[] privateKeyBytes = keyPair.getPrivate().getEncoded();
         FileOutputStream outputStream = new FileOutputStream(fileName);
@@ -63,24 +81,42 @@ public class CertificateAuthority implements Serializable {
         outputStream.close();
     }
 
+    /**
+     * Загрузить приватный ключ в объект CertificateAuthority
+     * @param privateKey приватный ключ
+     */
     public void loadPrivateKey(PrivateKey privateKey) {
         this.keyPair = new KeyPair(getPublicKey(), privateKey);
     }
 
-
+    /**
+     * Получить публичный ключ
+     * @return публичный ключ
+     */
     public PublicKey getPublicKey() {
         return keyPair.getPublic();
     }
 
+    /**
+     * Получить приватный ключ
+     * @return приватный ключ
+     */
     public PrivateKey getPrivateKey() {
         return keyPair.getPrivate();
     }
 
 
+    /**
+     * Создание само подписанного сертификата
+     * @param startDate Дата подписания сертификата
+     * @param endDate Дата истечения срока сертификата
+     * @return сертификат УЦ
+     * @throws OperatorCreationException
+     * @throws CertificateException
+     * @throws CertIOException
+     */
     public X509Certificate createSelfSignedCertificate(Date startDate, Date endDate) throws OperatorCreationException, CertificateException, CertIOException {
-        //X500Name subject = new X500Name("CN=ca");
         X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(issuer, serialNumber, startDate, endDate, issuer, keyPair.getPublic());
-        //X509v1CertificateBuilder certBuilder1 = new JcaX509v1CertificateBuilder(issuer, serialNumber, startDate, endDate, issuer, keyPair.getPublic());
         // Add extensions
         certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign));
         certBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(0));
@@ -96,7 +132,4 @@ public class CertificateAuthority implements Serializable {
         return certificate;
     }
 
-    public X500Name getIssuer() {
-        return issuer;
-    }
 }
