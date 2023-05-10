@@ -1,7 +1,9 @@
 ### IntelliJ IDEA ###
-idea/
-out/
+.idea/
+out
 target/
+src/main/resources/client
+src/main/resources/server
 !**/src/main/**/out/
 
 !**/src/test/**/out/

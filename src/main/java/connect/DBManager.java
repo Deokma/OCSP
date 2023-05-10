@@ -36,16 +36,16 @@ public class DBManager {
 
     /**
      * Добавление данный о сертификате в базу данных
-     * @param certID certificateID
+     *
+     * @param certID      certificateID
      * @param certificate сам сертификат (не используется)
-     * @param startDate Дата подписания сертификата
-     * @param endDate Дата окончания годности сертификата
-     * @param status Статус сертификата (по умолчания GOOD)
-     * @throws CertificateEncodingException
-     * @throws IOException
+     * @param startDate   Дата подписания сертификата
+     * @param endDate     Дата окончания годности сертификата
+     * @param status      Статус сертификата (по умолчания GOOD)
      */
     public void addCertificate(CertificateID certID, X509Certificate certificate,
-                               java.util.Date startDate, java.util.Date endDate, String status) throws CertificateEncodingException, IOException {
+                               java.util.Date startDate, java.util.Date endDate, String status) throws
+            CertificateEncodingException, IOException {
         try {
             PreparedStatement ps = conn.prepareStatement("INSERT INTO certificates " +
                     "(cert_id,certificate_data, cert_start_date,cert_end_date,cert_status) VALUES " +
@@ -65,6 +65,7 @@ public class DBManager {
 
     /**
      * Проверка на наличие сертификата
+     *
      * @param certificateID certificateID
      * @return true если присутствует, false если нет
      */
@@ -72,7 +73,8 @@ public class DBManager {
         try {
             byte[] certIdBytes = certificateID.toASN1Primitive().getEncoded();
 
-            PreparedStatement ps = conn.prepareStatement("SELECT EXISTS (SELECT 1 FROM certificates WHERE cert_id = ?)");
+            PreparedStatement ps =
+                    conn.prepareStatement("SELECT EXISTS (SELECT 1 FROM certificates WHERE cert_id = ?)");
             ps.setBytes(1, certIdBytes);
 
             ResultSet rs = ps.executeQuery();
@@ -86,6 +88,7 @@ public class DBManager {
 
     /**
      * Получить статус сертификата по certificateID
+     *
      * @param certificateID certificateID
      * @return статус (null если статуса нет)
      */
@@ -93,7 +96,8 @@ public class DBManager {
         try {
             byte[] certIdBytes = certificateID.toASN1Primitive().getEncoded();
 
-            PreparedStatement ps = conn.prepareStatement("SELECT cert_status FROM certificates WHERE cert_id = ?");
+            PreparedStatement ps =
+                    conn.prepareStatement("SELECT cert_status FROM certificates WHERE cert_id = ?");
             ps.setBytes(1, certIdBytes);
 
             ResultSet rs = ps.executeQuery();
@@ -109,6 +113,4 @@ public class DBManager {
         }
         return null; // Устанавливается на unknown в дальнейшем
     }
-
-
 }

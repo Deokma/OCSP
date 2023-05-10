@@ -9,6 +9,7 @@ import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import settings.CAClientSettings;
 
 import java.io.*;
 import java.net.ConnectException;
@@ -16,11 +17,6 @@ import java.net.Socket;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.Scanner;
-
-/**
- * @author Denis Popolamov
- */
 
 public class CAClient {
     static String serverHostname = "localhost"; // Имя сервера, к которому подключаемся
@@ -30,17 +26,16 @@ public class CAClient {
     static String clientPath = "../client/ca/";
 
     public static void main(String[] args) throws IOException, ClassNotFoundException {
-        new File(clientNamePath).mkdirs();
-        new File(clientPath).mkdirs();
 
-        checkSubjNameFile();
+        CAClientSettings caClientSettings = new CAClientSettings();
+        caClientSettings.checkCAClientNameFile();
 
         X500Name subject = new X500Name("CN=" + clientName);
 
         try {
             // Создаем сокет и подключаемся к серверу
             Socket socket = new Socket(serverHostname, port);
-            System.out.println("Подключен к серверу " + socket.getRemoteSocketAddress());
+            System.out.println("Connected to server " + socket.getRemoteSocketAddress());
             // Создаем каналы записи и чтения
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
             DataInputStream in = new DataInputStream(socket.getInputStream());
@@ -69,15 +64,19 @@ public class CAClient {
                 publicKeyStream.close();
             }
 
-            java.security.interfaces.RSAPublicKey rsaPublicKey = (java.security.interfaces.RSAPublicKey) keyPair.getPublic();
-            java.security.interfaces.RSAPrivateKey rsaPrivateKey = (java.security.interfaces.RSAPrivateKey) keyPair.getPrivate();
+            java.security.interfaces.RSAPublicKey rsaPublicKey =
+                    (java.security.interfaces.RSAPublicKey) keyPair.getPublic();
+            java.security.interfaces.RSAPrivateKey rsaPrivateKey =
+                    (java.security.interfaces.RSAPrivateKey) keyPair.getPrivate();
 
             SubjectPublicKeyInfo subjectPublicKeyInfo = SubjectPublicKeyInfo.getInstance(rsaPublicKey.getEncoded());
 
-            CertificationRequestInfo certificationRequestInfo = new CertificationRequestInfo(subject, subjectPublicKeyInfo, null);
+            CertificationRequestInfo certificationRequestInfo =
+                    new CertificationRequestInfo(subject, subjectPublicKeyInfo, null);
 
             // Создаем объект AlgorithmIdentifier из алгоритма подписи
-            AlgorithmIdentifier algorithmIdentifier = new AlgorithmIdentifier(new ASN1ObjectIdentifier("1.2.840.113549.1.1.11"), DERNull.INSTANCE);
+            AlgorithmIdentifier algorithmIdentifier =
+                    new AlgorithmIdentifier(new ASN1ObjectIdentifier("1.2.840.113549.1.1.11"), DERNull.INSTANCE);
 
             // Создаем подпись запроса на сертификат
             Signature signature = Signature.getInstance("SHA256withRSA");
@@ -87,7 +86,8 @@ public class CAClient {
             DERBitString derBitString = new DERBitString(signatureBytes);
 
             // Создаем объект CertificationRequest из CertificationRequestInfo, AlgorithmIdentifier и подписи
-            CertificationRequest certificationRequest = new CertificationRequest(certificationRequestInfo, algorithmIdentifier, derBitString);
+            CertificationRequest certificationRequest =
+                    new CertificationRequest(certificationRequestInfo, algorithmIdentifier, derBitString);
 
             // Создаем PKCS#10 запрос на сертификат
             PKCS10CertificationRequest csr = new PKCS10CertificationRequest(certificationRequest);
@@ -96,7 +96,7 @@ public class CAClient {
             out.writeInt(csr.getEncoded().length);
             out.write(csr.getEncoded());
             out.flush();
-            System.out.println("Запрос на сертификат отправлен на сервер");
+            System.out.println("The certificate request has been sent to the server");
 
             int fileSize = in.readInt();
             byte[] fileBytes = new byte[fileSize];
@@ -114,35 +114,21 @@ public class CAClient {
             fos.write(fileBytes);
             fos.close();
 
-            System.out.println("Файл сохранен, размер: " + fileSize + " байт");
+            System.out.println("File saved, size: " + fileSize + " bytes");
 
             // Закрываем соединение
             socket.close();
-            System.out.println("Соединение с сервером закрыто");
+            System.out.println("The connection to the server is closed");
         } catch (
                 ConnectException e) {
-            System.out.println("Извините, неполадки с соединением. " +
-                    "Возможно сервер сейчас не доступен.");
+            System.out.println("Sorry, connection problems. " +
+                    "The server may not be available right now.");
         } catch (
                 IOException e) {
             e.printStackTrace();
         } catch (
                 NoSuchAlgorithmException | SignatureException | InvalidKeyException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    public static void checkSubjNameFile() throws IOException, ClassNotFoundException {
-        if (!new File(clientNamePath + "subjectName.dat").exists()) {
-            Scanner scanner = new Scanner(System.in);
-            System.out.print("Пожалуйста введите имя пользователя: ");
-            clientName = scanner.nextLine();
-            ObjectOutputStream subjectNameOut = new ObjectOutputStream(new FileOutputStream(clientNamePath + "subjectName.dat"));
-            subjectNameOut.writeObject(clientName);
-            subjectNameOut.close();
-        } else {
-            ObjectInputStream subjectNameIn = new ObjectInputStream(new FileInputStream(clientNamePath + "subjectName.dat"));
-            clientName = (String) subjectNameIn.readObject();
         }
     }
 }
